@@ -565,5 +565,4 @@ Auth.get("/user-count", authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = upload;
-module.exports = { Auth };
+module.exports = { Auth, upload };
