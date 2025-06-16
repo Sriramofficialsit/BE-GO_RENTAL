@@ -275,19 +275,17 @@ Approvals.get("/request-get-all", authMiddleware, async (req, res) => {
     if (email) {
       query.email = email;
     }
-    const data = await Request.find(query);
-    console.log(`All requests with email "${email || 'all'}":`, data.length);
+    const data = await Request.find({});
+    console.log(`All requests with email "${email}":`, data);
     return res.status(200).json({
       data,
       message: "Data fetched successfully",
       success: true,
     });
   } catch (error) {
-    console.error("Error fetching requests:", error.message);
     return res.status(500).json({
-      message: "Failed to fetch requests",
+      message: error.message,
       success: false,
-      error: error.message,
     });
   }
 });
