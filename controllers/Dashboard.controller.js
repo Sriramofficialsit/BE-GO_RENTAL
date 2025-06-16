@@ -63,509 +63,526 @@ Dashboard.get("/cars-renter", authMiddleware, async (req, res) => {
     });
   }
 });
-Dashboard.post(
-  "/car-insert",
-  authMiddleware,
-  upload.single("image"),
-  async (req, res) => {
-    try {
-      const {
-        name,
-        priceperday,
-        ac,
-        passengers,
-        transmission,
-        seats,
-        doors,
-        modelYear,
-        ratings,
-        reviews,
-        fuelType,
-        carNumber,
-        from,
-        to,
-        permited_city,
-        email,
-      } = req.body;
+Dashboard.post("/car-insert", authMiddleware, upload.single("file"), async (req, res) => {
+  try {
+    console.log("Received car-insert request:", {
+      body: req.body,
+      file: req.file ? { filename: req.file.filename, mimetype: req.file.mimetype, size: req.file.size } : null,
+    });
 
-      const imageFilePath = req.file;
+    const {
+      name,
+      priceperday,
+      ac,
+      passengers,
+      transmission,
+      seats,
+      doors,
+      modelYear,
+      ratings,
+      reviews,
+      fuelType,
+      carNumber,
+      from,
+      to,
+      permited_city,
+      email,
+    } = req.body;
 
-      if (
-        !name ||
-        !priceperday ||
-        ac === undefined ||
-        !passengers ||
-        !transmission ||
-        !seats ||
-        !doors ||
-        !modelYear ||
-        ratings === undefined ||
-        reviews === undefined ||
-        !fuelType ||
-        !carNumber ||
-        !from ||
-        !to ||
-        !permited_city ||
-        !email
-      ) {
-        return res.status(400).json({
-          message: "All fields are required",
-          success: false,
-        });
-      }
+    const file = req.file;
 
-      if (!imageFile) {
-        return res.status(400).json({
-          message: "Image file is required",
-          success: false,
-        });
-      }
+    if (
+      !name ||
+      !priceperday ||
+      ac === undefined ||
+      !passengers ||
+      !transmission ||
+      !seats ||
+      !doors ||
+      !modelYear ||
+      ratings === undefined ||
+      reviews === undefined ||
+      !fuelType ||
+      !carNumber ||
+      !from ||
+      !to ||
+      !permited_city ||
+      !email
+    ) {
+      console.log("Missing required fields:", {
+        name, priceperday, ac, passengers, transmission, seats, doors,
+        modelYear, ratings, reviews, fuelType, carNumber, from, to, permited_city, email,
+      });
+      return res.status(400).json({
+        message: "All fields are required",
+        success: false,
+      });
+    }
 
+    if (!file) {
+      console.log("No file uploaded");
+      return res.status(400).json({
+        message: "Image file is required",
+        success: false,
+      });
+    }
+
+    const allowedTypes = ["image/png", "image/jpeg", "image/jpg"];
+    if (!allowedTypes.includes(file.mimetype)) {
+      console.log("Invalid file type:", file.mimetype);
+      return res.status(400).json({
+        message: "Image must be a PNG, JPG, or JPEG file",
+        success: false,
+      });
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      console.log("File too large:", file.size);
+      return res.status(400).json({
+        message: "Image size must not exceed 5MB",
+        success: false,
+      });
+    }
+
+    const carNumberRegex = /^[A-Z]{2}-\d{4}$/;
+    if (!carNumberRegex.test(carNumber)) {
+      console.log("Invalid car number:", carNumber);
+      return res.status(400).json({
+        message: "Car number must be in the format XX-1234 (e.g., AB-1234)",
+        success: false,
+      });
+    }
+
+    const validFuelTypes = ["Petrol", "Diesel", "Electric"];
+    if (!validFuelTypes.includes(fuelType)) {
+      console.log("Invalid fuel type:", fuelType);
+      return res.status(400).json({
+        message: "Fuel type must be one of: Petrol, Diesel, Electric",
+        success: false,
+      });
+    }
+
+    const validTransmissionTypes = ["Auto", "Manual"];
+    if (!validTransmissionTypes.includes(transmission)) {
+      console.log("Invalid transmission:", transmission);
+      return res.status(400).json({
+        message: "Transmission must be one of: Auto, Manual",
+        success: false,
+      });
+    }
+
+    const validCities = [
+      "chennai", "coimbatore", "madurai", "trichy",
+      "hyderbad", "banglore", "kochi", "goa", "cdm",
+    ];
+    if (!validCities.includes(permited_city)) {
+      console.log("Invalid city:", permited_city);
+      return res.status(400).json({
+        message: `Permitted city must be one of: ${validCities.join(", ")}`,
+        success: false,
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      console.log("Invalid email:", email);
+      return res.status(400).json({
+        message: "Invalid email format",
+        success: false,
+      });
+    }
+
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    if (isNaN(fromDate.getTime())) {
+      console.log("Invalid from date:", from);
+      return res.status(400).json({
+        message: "Invalid 'from' date format",
+        success: false,
+      });
+    }
+    if (isNaN(toDate.getTime())) {
+      console.log("Invalid to date:", to);
+      return res.status(400).json({
+        message: "Invalid 'to' date format",
+        success: false,
+      });
+    }
+
+    const carData = {
+      name: name.trim(),
+      priceperday: Number(priceperday),
+      ac: ac === "true",
+      passengers: Number(passengers),
+      transmission,
+      seats: Number(seats),
+      doors: Number(doors),
+      modelYear: Number(modelYear),
+      ratings: Number(ratings),
+      reviews: Number(reviews),
+      fuelType,
+      image: `Uploads/images/${file.filename}`,
+      carNumber: carNumber.trim().toUpperCase(),
+      from: fromDate,
+      to: toDate,
+      permited_city,
+      email: email.trim(),
+    };
+
+    console.log("Attempting to save car:", carData);
+    const newCar = new Car(carData);
+    const insertedCar = await newCar.save();
+    console.log("Car saved successfully:", insertedCar._id);
+
+    return res.status(201).json({
+      message: "Car inserted successfully",
+      success: true,
+      data: insertedCar,
+    });
+  } catch (error) {
+    console.error("Error inserting car:", {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      name: error.name,
+    });
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        message: "Validation failed",
+        success: false,
+        error: Object.values(error.errors).map((err) => err.message),
+      });
+    }
+    if (error.code === 11000) {
+      return res.status(400).json({
+        message: "Car number already exists",
+        success: false,
+      });
+    }
+    return res.status(500).json({
+      message: "Failed to insert car",
+      success: false,
+      error: error.message,
+    });
+  }
+});
+Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (req, res) => {
+  try {
+    console.log("Received car-update request:", {
+      params: req.params,
+      body: req.body,
+      file: req.file ? { filename: req.file.filename, mimetype: req.file.mimetype, size: req.file.size } : null,
+    });
+
+    const carId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(carId)) {
+      console.log("Invalid car ID:", carId);
+      return res.status(400).json({
+        message: "Invalid car ID format",
+        success: false,
+      });
+    }
+
+    const carObjectId = new mongoose.Types.ObjectId(carId);
+    const car = await Car.findById(carObjectId);
+    if (!car) {
+      console.log("Car not found for ID:", carId);
+      return res.status(404).json({
+        message: "Car not found",
+        success: false,
+      });
+    }
+
+    const {
+      name,
+      priceperday,
+      ac,
+      passengers,
+      transmission,
+      seats,
+      doors,
+      modelYear,
+      ratings,
+      reviews,
+      fuelType,
+      carNumber,
+      from,
+      to,
+      permited_city,
+    } = req.body;
+
+    const file = req.file;
+
+    // Validate file if provided
+    if (file) {
       const allowedTypes = ["image/png", "image/jpeg", "image/jpg"];
-      if (!allowedTypes.includes(imageFile.mimetype)) {
+      if (!allowedTypes.includes(file.mimetype)) {
+        console.log("Invalid file type:", file.mimetype);
         return res.status(400).json({
           message: "Image must be a PNG, JPG, or JPEG file",
           success: false,
         });
       }
-
-      if (imageFile.size > 5 * 1024 * 1024) {
-        // 5MB limit
+      if (file.size > 5 * 1024 * 1024) {
+        console.log("File too large:", file.size);
         return res.status(400).json({
           message: "Image size must not exceed 5MB",
           success: false,
         });
       }
+    }
 
-      const carNumberRegex = /^[A-Z]{2}-\d{4}$/;
-      if (!carNumberRegex.test(carNumber)) {
+    const updatedCarData = {};
+    if (name) updatedCarData.name = name.trim();
+    if (priceperday !== undefined) {
+      if (isNaN(priceperday) || Number(priceperday) < 0) {
+        console.log("Invalid priceperday:", priceperday);
         return res.status(400).json({
-          message: "Number must be in the format XX-1234 (e.g., AB-1234)",
+          message: "Price per day must be a non-negative number",
           success: false,
         });
       }
-
-      const validFuelTypes = ["Petrol", "Diesel", "Electric"];
-      if (!validFuelTypes.includes(fuelType)) {
+      updatedCarData.priceperday = Number(priceperday);
+    }
+    if (ac !== undefined) updatedCarData.ac = ac === "true";
+    if (passengers !== undefined) {
+      if (isNaN(passengers) || Number(passengers) < 1 || Number(passengers) > 8) {
+        console.log("Invalid passengers:", passengers);
         return res.status(400).json({
-          message: "Fuel type must be one of: Petrol, Diesel, Electric",
+          message: "Passengers must be between 1 and 8",
           success: false,
         });
       }
-
-      const validTransmissionTypes = ["Auto", "Manual"];
-      if (!validTransmissionTypes.includes(transmission)) {
+      updatedCarData.passengers = Number(passengers);
+    }
+    if (transmission) {
+      const validTransmissions = ["Auto", "Manual"];
+      if (!validTransmissions.includes(transmission)) {
+        console.log("Invalid transmission:", transmission);
         return res.status(400).json({
           message: "Transmission must be one of: Auto, Manual",
           success: false,
         });
       }
-
+      updatedCarData.transmission = transmission;
+    }
+    if (seats !== undefined) {
+      if (isNaN(seats) || Number(seats) < 1 || Number(seats) > 8) {
+        console.log("Invalid seats:", seats);
+        return res.status(400).json({
+          message: "Seats must be between 1 and 8",
+          success: false,
+        });
+      }
+      updatedCarData.seats = Number(seats);
+    }
+    if (doors !== undefined) {
+      if (isNaN(doors) || Number(doors) < 2 || Number(doors) > 6) {
+        console.log("Invalid doors:", doors);
+        return res.status(400).json({
+          message: "Doors must be between 2 and 6",
+          success: false,
+        });
+      }
+      updatedCarData.doors = Number(doors);
+    }
+    if (modelYear !== undefined) {
+      if (
+        isNaN(modelYear) ||
+        Number(modelYear) < 1900 ||
+        Number(modelYear) > new Date().getFullYear() + 1
+      ) {
+        console.log("Invalid modelYear:", modelYear);
+        return res.status(400).json({
+          message: `Model year must be between 1900 and ${new Date().getFullYear() + 1}`,
+          success: false,
+        });
+      }
+      updatedCarData.modelYear = Number(modelYear);
+    }
+    if (ratings !== undefined) {
+      if (isNaN(ratings) || Number(ratings) < 0 || Number(ratings) > 5) {
+        console.log("Invalid ratings:", ratings);
+        return res.status(400).json({
+          message: "Ratings must be between 0 and 5",
+          success: false,
+        });
+      }
+      updatedCarData.ratings = Number(ratings);
+    }
+    if (reviews !== undefined) {
+      if (isNaN(reviews) || Number(reviews) < 0) {
+        console.log("Invalid reviews:", reviews);
+        return res.status(400).json({
+          message: "Reviews must be a non-negative number",
+          success: false,
+        });
+      }
+      updatedCarData.reviews = Number(reviews);
+    }
+    if (fuelType) {
+      const validFuelTypes = ["Petrol", "Diesel", "Electric"];
+      if (!validFuelTypes.includes(fuelType)) {
+        console.log("Invalid fuel type:", fuelType);
+        return res.status(400).json({
+          message: "Fuel type must be one of: Petrol, Diesel, Electric",
+          success: false,
+        });
+      }
+      updatedCarData.fuelType = fuelType;
+    }
+    if (carNumber) {
+      const carNumberRegex = /^[A-Z]{2}-\d{4}$/;
+      if (!carNumberRegex.test(carNumber.trim())) {
+        console.log("Invalid car number:", carNumber);
+        return res.status(400).json({
+          message: "Car number must be in the format XX-1234 (e.g., AB-1234)",
+          success: false,
+        });
+      }
+      updatedCarData.carNumber = carNumber.trim().toUpperCase();
+    }
+    if (permited_city) {
       const validCities = [
-        "chennai",
-        "coimbatore",
-        "madurai",
-        "trichy",
-        "hyderbad",
-        "banglore",
-        "kochi",
-        "goa",
-        "cdm",
+        "chennai", "coimbatore", "madurai", "trichy",
+        "hyderbad", "banglore", "kochi", "goa", "cdm",
       ];
       if (!validCities.includes(permited_city)) {
+        console.log("Invalid city:", permited_city);
         return res.status(400).json({
           message: `Permitted city must be one of: ${validCities.join(", ")}`,
           success: false,
         });
       }
-
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
-        return res.status(400).json({
-          message: "Invalid email format",
-          success: false,
-        });
-      }
-
-      const fromDate = new Date(from);
-      const toDate = new Date(to);
-      if (isNaN(fromDate.getTime())) {
+      updatedCarData.permited_city = permited_city;
+    }
+    if (from || to) {
+      const fromDate = from ? new Date(from) : car.from;
+      const toDate = to ? new Date(to) : car.to;
+      if (from && isNaN(fromDate.getTime())) {
+        console.log("Invalid from date:", from);
         return res.status(400).json({
           message: "Invalid 'from' date format",
           success: false,
         });
       }
-      if (isNaN(toDate.getTime())) {
+      if (to && isNaN(toDate.getTime())) {
+        console.log("Invalid to date:", to);
         return res.status(400).json({
           message: "Invalid 'to' date format",
           success: false,
         });
       }
+      if (from) updatedCarData.from = fromDate;
+      if (to) updatedCarData.to = toDate;
+    }
+    if (file) {
+      if (car.image) {
+        try {
+          const oldImagePath = path.join(__dirname, "..", "public", car.image);
+          await fs.unlink(oldImagePath);
+          console.log("Old image deleted:", oldImagePath);
+        } catch (err) {
+          console.warn("Old image file could not be deleted:", err.message);
+        }
+      }
+      updatedCarData.image = `Uploads/images/${file.filename}`;
+    }
 
-      const carData = {
-        name: name.trim(),
-        priceperday: Number(priceperday),
-        ac: ac === "true",
-        passengers: Number(passengers),
-        transmission,
-        seats: Number(seats),
-        doors: Number(doors),
-        modelYear: Number(modelYear),
-        ratings: Number(ratings),
-        reviews: Number(reviews),
-        fuelType,
-        image: `Uploads/images/${imageFile.filename}`,
-        carNumber: carNumber.trim().toUpperCase(),
-        from: fromDate,
-        to: toDate,
-        permited_city,
-        email: email.trim(),
+    console.log("Updating car with data:", updatedCarData);
+    const updatedCar = await Car.findByIdAndUpdate(
+      carObjectId,
+      { $set: updatedCarData },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedCar) {
+      console.log("Car update failed, not found:", carId);
+      return res.status(404).json({
+        message: "Car not found",
+        success: false,
+      });
+    }
+
+    // Update related requests
+    const carNumberToMatch = updatedCarData.carNumber || car.carNumber;
+    const matchingRequests = await Request.countDocuments({
+      carNumber: carNumberToMatch,
+    });
+
+    if (matchingRequests > 0) {
+      const requestUpdateData = {
+        car_model: updatedCar.name,
+        priceperday: updatedCar.priceperday,
+        ac: updatedCar.ac,
+        passengers: updatedCar.passengers,
+        transmission: updatedCar.transmission,
+        seats: updatedCar.seats,
+        doors: updatedCar.doors,
+        modelYear: updatedCar.modelYear,
+        ratings: updatedCar.ratings,
+        reviews: updatedCar.reviews,
+        fuelType: updatedCar.fuelType,
+        carNumber: updatedCar.carNumber,
+        permited_city: updatedCar.permited_city,
       };
+      if (updatedCarData.from) requestUpdateData.from = updatedCarData.from;
+      if (updatedCarData.to) requestUpdateData.to = updatedCarData.to;
+      if (updatedCarData.image) requestUpdateData.image = updatedCarData.image;
 
-      const newCar = new Car(carData);
-      const insertedCar = await newCar.save();
-
-      return res.status(201).json({
-        message: "Car inserted successfully",
-        success: true,
-        data: insertedCar,
-      });
-    } catch (error) {
-      console.error("Error inserting car:", {
-        message: error.message,
-        stack: error.stack,
-      });
-
-      if (error.name === "ValidationError") {
-        return res.status(400).json({
-          message: "Validation failed",
-          success: false,
-          error: Object.values(error.errors).map((err) => err.message),
-        });
-      }
-      if (error.code === 11000) {
-        return res.status(400).json({
-          message: "Car number already exists",
-          success: false,
-        });
-      }
-      return res.status(500).json({
-        message: "Failed to insert car",
-        success: false,
-        error: error.message,
-      });
-    }
-  }
-);
-Dashboard.put(
-  "/car-update/:id",
-  authMiddleware,
-  upload.single("image"),
-  async (req, res) => {
-    try {
-      const carId = req.params.id;
-      if (!mongoose.Types.ObjectId.isValid(carId)) {
-        return res.status(400).json({
-          message: "Invalid car ID format",
-          success: false,
-        });
-      }
-
-      const carObjectId = new mongoose.Types.ObjectId(carId);
-      const car = await Car.findById(carObjectId);
-      if (!car) {
-        return res.status(404).json({
-          message: "Car not found",
-          success: false,
-        });
-      }
-
-      const {
-        name,
-        priceperday,
-        ac,
-        passengers,
-        transmission,
-        seats,
-        doors,
-        modelYear,
-        ratings,
-        reviews,
-        fuelType,
-        carNumber,
-        from,
-        to,
-        permited_city,
-      } = req.body;
-
-      const imageFile = req.file;
-
-      // Validate image file if provided
-      if (imageFile) {
-        const allowedTypes = ["image/png", "image/jpeg", "image/jpg"];
-        if (!allowedTypes.includes(imageFile.mimetype)) {
-          return res.status(400).json({
-            message: "Image must be a PNG, JPG, or JPEG file",
-            success: false,
-          });
-        }
-        if (imageFile.size > 5 * 1024 * 1024) {
-          return res.status(400).json({
-            message: "Image size must not exceed 5MB",
-            success: false,
-          });
-        }
-      }
-
-      const updatedCarData = {};
-      if (name) updatedCarData.name = name.trim();
-      if (priceperday !== undefined) {
-        if (isNaN(priceperday) || Number(priceperday) < 0) {
-          return res.status(400).json({
-            message: "Price per day must be a non-negative number",
-            success: false,
-          });
-        }
-        updatedCarData.priceperday = Number(priceperday);
-      }
-      if (ac !== undefined) updatedCarData.ac = ac === "true";
-      if (passengers !== undefined) {
-        if (
-          isNaN(passengers) ||
-          Number(passengers) < 1 ||
-          Number(passengers) > 8
-        ) {
-          return res.status(400).json({
-            message: "Passengers must be between 1 and 8",
-            success: false,
-          });
-        }
-        updatedCarData.passengers = Number(passengers);
-      }
-      if (transmission) {
-        const validTransmissions = ["Auto", "Manual"];
-        if (!validTransmissions.includes(transmission)) {
-          return res.status(400).json({
-            message: "Transmission must be one of: Auto, Manual",
-            success: false,
-          });
-        }
-        updatedCarData.transmission = transmission;
-      }
-      if (seats !== undefined) {
-        if (isNaN(seats) || Number(seats) < 1 || Number(seats) > 8) {
-          return res.status(400).json({
-            message: "Seats must be between 1 and 8",
-            success: false,
-          });
-        }
-        updatedCarData.seats = Number(seats);
-      }
-      if (doors !== undefined) {
-        if (isNaN(doors) || Number(doors) < 2 || Number(doors) > 6) {
-          return res.status(400).json({
-            message: "Doors must be between 2 and 6",
-            success: false,
-          });
-        }
-        updatedCarData.doors = Number(doors);
-      }
-      if (modelYear !== undefined) {
-        if (
-          isNaN(modelYear) ||
-          Number(modelYear) < 1900 ||
-          Number(modelYear) > new Date().getFullYear() + 1
-        ) {
-          return res.status(400).json({
-            message: `Model year must be between 1900 and ${
-              new Date().getFullYear() + 1
-            }`,
-            success: false,
-          });
-        }
-        updatedCarData.modelYear = Number(modelYear);
-      }
-      if (ratings !== undefined) {
-        if (isNaN(ratings) || Number(ratings) < 0 || Number(ratings) > 5) {
-          return res.status(400).json({
-            message: "Ratings must be between 0 and 5",
-            success: false,
-          });
-        }
-        updatedCarData.ratings = Number(ratings);
-      }
-      if (reviews !== undefined) {
-        if (isNaN(reviews) || Number(reviews) < 0) {
-          return res.status(400).json({
-            message: "Reviews must be a non-negative number",
-            success: false,
-          });
-        }
-        updatedCarData.reviews = Number(reviews);
-      }
-      if (fuelType) {
-        const validFuelTypes = ["Petrol", "Diesel", "Electric"];
-        if (!validFuelTypes.includes(fuelType)) {
-          return res.status(400).json({
-            message: "Fuel type must be one of: Petrol, Diesel, Electric",
-            success: false,
-          });
-        }
-        updatedCarData.fuelType = fuelType;
-      }
-      if (carNumber) {
-        const carNumberRegex = /^[A-Z]{2}-\d{4}$/;
-        if (!carNumberRegex.test(carNumber.trim())) {
-          return res.status(400).json({
-            message: "Car number must be in the format XX-1234 (e.g., AB-1234)",
-            success: false,
-          });
-        }
-        updatedCarData.carNumber = carNumber.trim().toUpperCase();
-      }
-      if (permited_city) {
-        const validCities = [
-          "chennai",
-          "coimbatore",
-          "madurai",
-          "trichy",
-          "hyderbad",
-          "banglore",
-          "kochi",
-          "goa",
-          "cdm",
-        ];
-        if (!validCities.includes(permited_city)) {
-          return res.status(400).json({
-            message: `Permitted city must be one of: ${validCities.join(", ")}`,
-            success: false,
-          });
-        }
-        updatedCarData.permited_city = permited_city;
-      }
-      if (from || to) {
-        const fromDate = from ? new Date(from) : car.from;
-        const toDate = to ? new Date(to) : car.to;
-        if (from && isNaN(fromDate.getTime())) {
-          return res.status(400).json({
-            message: "Invalid 'from' date format",
-            success: false,
-          });
-        }
-        if (to && isNaN(toDate.getTime())) {
-          return res.status(400).json({
-            message: "Invalid 'to' date format",
-            success: false,
-          });
-        }
-        if (from) updatedCarData.from = fromDate;
-        if (to) updatedCarData.to = toDate;
-      }
-      if (imageFile) {
-        if (car.image) {
-          try {
-            const oldImagePath = path.join(
-              __dirname,
-              "..",
-              "public",
-              car.image
-            );
-            await fs.unlink(oldImagePath);
-          } catch (err) {
-            console.warn("Old image file could not be deleted:", err.message);
-          }
-        }
-        updatedCarData.image = `Uploads/images/${imageFile.filename}`;
-      }
-
-      const updatedCar = await Car.findByIdAndUpdate(
-        carObjectId,
-        { $set: updatedCarData },
-        { new: true, runValidators: true }
+      const updateResult = await Request.updateMany(
+        { carNumber: carNumberToMatch },
+        { $set: requestUpdateData }
       );
+      console.log(`Updated ${updateResult.modifiedCount} requests for carNumber: ${carNumberToMatch}`);
 
-      if (!updatedCar) {
-        return res.status(404).json({
-          message: "Car not found",
-          success: false,
-        });
+      if (updateResult.modifiedCount === 0) {
+        console.warn("No requests were modified. Check schema alignment.");
       }
+    } else {
+      console.log("No related requests found for carNumber:", carNumberToMatch);
+    }
 
-      // Update related requests
-      const carNumberToMatch = updatedCarData.carNumber || car.carNumber;
-      const matchingRequests = await Request.countDocuments({
-        carNumber: carNumberToMatch,
-      });
+    const baseUrl = process.env.BASE_URL || "https://be-go-rental-hbsq.onrender.com";
+    const updatedCarResponse = updatedCar.toObject();
+    if (updatedCarResponse.image) {
+      updatedCarResponse.image = `${baseUrl}/${updatedCarResponse.image}`;
+    }
 
-      if (matchingRequests > 0) {
-        const requestUpdateData = {
-          car_model: updatedCar.name,
-          priceperday: updatedCar.priceperday,
-          ac: updatedCar.ac,
-          passengers: updatedCar.passengers,
-          transmission: updatedCar.transmission,
-          seats: updatedCar.seats,
-          doors: updatedCar.doors,
-          modelYear: updatedCar.modelYear,
-          ratings: updatedCar.ratings,
-          reviews: updatedCar.reviews,
-          fuelType: updatedCar.fuelType,
-          carNumber: updatedCar.carNumber,
-          permited_city: updatedCar.permited_city,
-        };
-        if (updatedCarData.from) requestUpdateData.from = updatedCarData.from;
-        if (updatedCarData.to) requestUpdateData.to = updatedCarData.to;
-        if (updatedCarData.image)
-          requestUpdateData.image = updatedCarData.image;
-
-        const updateResult = await Request.updateMany(
-          { carNumber: carNumberToMatch },
-          { $set: requestUpdateData }
-        );
-
-        if (updateResult.modifiedCount === 0) {
-          console.warn("No requests were modified. Check schema alignment.");
-        }
-      }
-
-      const baseUrl =
-        process.env.BASE_URL || "https://be-go-rental-hbsq.onrender.com";
-      const updatedCarResponse = updatedCar.toObject();
-      if (updatedCarResponse.image) {
-        updatedCarResponse.image = `${baseUrl}/${updatedCarResponse.image}`;
-      }
-
-      return res.status(200).json({
-        message: "Car and related requests updated successfully",
-        success: true,
-        data: updatedCarResponse,
-      });
-    } catch (error) {
-      console.error("Error updating car:", {
-        message: error.message,
-        stack: error.stack,
-      });
-      if (error.name === "ValidationError") {
-        return res.status(400).json({
-          message: "Validation failed",
-          success: false,
-          error: Object.values(error.errors).map((err) => err.message),
-        });
-      }
-      if (error.code === 11000) {
-        return res.status(400).json({
-          message: "Car number already exists",
-          success: false,
-        });
-      }
-      return res.status(500).json({
-        message: "Failed to update car",
+    console.log("Car updated successfully:", updatedCar._id);
+    return res.status(200).json({
+      message: "Car and related requests updated successfully",
+      success: true,
+      data: updatedCarResponse,
+    });
+  } catch (error) {
+    console.error("Error updating car:", {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      name: error.name,
+    });
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        message: "Validation failed",
         success: false,
-        error: error.message,
+        error: Object.values(error.errors).map((err) => err.message),
       });
     }
+    if (error.code === 11000) {
+      return res.status(400).json({
+        message: "Car number already exists",
+        success: false,
+      });
+    }
+    return res.status(500).json({
+      message: "Failed to update car",
+      success: false,
+      error: error.message,
+    });
   }
-);
+});
 Dashboard.get("/cars/:id", authMiddleware, async (req, res) => {
   try {
     const carId = req.params.id;
