@@ -294,28 +294,11 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
 
     const file = req.file;
 
-    // Validate file if provided
-    if (file) {
-      const allowedTypes = ["image/png", "image/jpeg", "image/jpg"];
-      if (!allowedTypes.includes(file.mimetype)) {
-        console.log("Invalid file type:", file.mimetype);
-        return res.status(400).json({
-          message: "Image must be a PNG, JPG, or JPEG file",
-          success: false,
-        });
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        console.log("File too large:", file.size);
-        return res.status(400).json({
-          message: "Image size must not exceed 5MB",
-          success: false,
-        });
-      }
-    }
-
     const updatedCarData = {};
+
+    // Validate and add fields only if provided
     if (name) updatedCarData.name = name.trim();
-    if (priceperday !== undefined) {
+    if (priceperday !== undefined && priceperday !== "") {
       if (isNaN(priceperday) || Number(priceperday) < 0) {
         console.log("Invalid priceperday:", priceperday);
         return res.status(400).json({
@@ -325,8 +308,8 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
       }
       updatedCarData.priceperday = Number(priceperday);
     }
-    if (ac !== undefined) updatedCarData.ac = ac === "true";
-    if (passengers !== undefined) {
+    if (ac !== undefined) updatedCarData.ac = ac === "true" || ac === true;
+    if (passengers !== undefined && passengers !== "") {
       if (isNaN(passengers) || Number(passengers) < 1 || Number(passengers) > 8) {
         console.log("Invalid passengers:", passengers);
         return res.status(400).json({
@@ -347,7 +330,7 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
       }
       updatedCarData.transmission = transmission;
     }
-    if (seats !== undefined) {
+    if (seats !== undefined && seats !== "") {
       if (isNaN(seats) || Number(seats) < 1 || Number(seats) > 8) {
         console.log("Invalid seats:", seats);
         return res.status(400).json({
@@ -357,7 +340,7 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
       }
       updatedCarData.seats = Number(seats);
     }
-    if (doors !== undefined) {
+    if (doors !== undefined && doors !== "") {
       if (isNaN(doors) || Number(doors) < 2 || Number(doors) > 6) {
         console.log("Invalid doors:", doors);
         return res.status(400).json({
@@ -367,7 +350,7 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
       }
       updatedCarData.doors = Number(doors);
     }
-    if (modelYear !== undefined) {
+    if (modelYear !== undefined && modelYear !== "") {
       if (
         isNaN(modelYear) ||
         Number(modelYear) < 1900 ||
@@ -381,7 +364,7 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
       }
       updatedCarData.modelYear = Number(modelYear);
     }
-    if (ratings !== undefined) {
+    if (ratings !== undefined && ratings !== "") {
       if (isNaN(ratings) || Number(ratings) < 0 || Number(ratings) > 5) {
         console.log("Invalid ratings:", ratings);
         return res.status(400).json({
@@ -391,7 +374,7 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
       }
       updatedCarData.ratings = Number(ratings);
     }
-    if (reviews !== undefined) {
+    if (reviews !== undefined && reviews !== "") {
       if (isNaN(reviews) || Number(reviews) < 0) {
         console.log("Invalid reviews:", reviews);
         return res.status(400).json({
@@ -458,6 +441,21 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
       if (to) updatedCarData.to = toDate;
     }
     if (file) {
+      const allowedTypes = ["image/png", "image/jpeg", "image/jpg"];
+      if (!allowedTypes.includes(file.mimetype)) {
+        console.log("Invalid file type:", file.mimetype);
+        return res.status(400).json({
+          message: "Image must be a PNG, JPG, or JPEG file",
+          success: false,
+        });
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        console.log("File too large:", file.size);
+        return res.status(400).json({
+          message: "Image size must not exceed 5MB",
+          success: false,
+        });
+      }
       if (car.image) {
         try {
           const oldImagePath = path.join(__dirname, "..", car.image);
@@ -467,7 +465,15 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
           console.warn("Old image file could not be deleted:", err.message);
         }
       }
-      updatedCarData.image = `Uploads/${file.filename}`; // Updated to match User.controller.js destination
+      updatedCarData.image = `Uploads/${file.filename}`;
+    }
+
+    if (Object.keys(updatedCarData).length === 0 && !file) {
+      console.log("No fields provided for update:", carId);
+      return res.status(400).json({
+        message: "No valid fields provided for update",
+        success: false,
+      });
     }
 
     console.log("Updating car with data:", updatedCarData);
@@ -492,21 +498,20 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
     });
 
     if (matchingRequests > 0) {
-      const requestUpdateData = {
-        car_model: updatedCar.name,
-        priceperday: updatedCar.priceperday,
-        ac: updatedCar.ac,
-        passengers: updatedCar.passengers,
-        transmission: updatedCar.transmission,
-        seats: updatedCar.seats,
-        doors: updatedCar.doors,
-        modelYear: updatedCar.modelYear,
-        ratings: updatedCar.ratings,
-        reviews: updatedCar.reviews,
-        fuelType: updatedCar.fuelType,
-        carNumber: updatedCar.carNumber,
-        permited_city: updatedCar.permited_city,
-      };
+      const requestUpdateData = {};
+      if (updatedCarData.name) requestUpdateData.car_model = updatedCarData.name;
+      if (updatedCarData.priceperday !== undefined) requestUpdateData.priceperday = updatedCarData.priceperday;
+      if (updatedCarData.ac !== undefined) requestUpdateData.ac = updatedCarData.ac;
+      if (updatedCarData.passengers !== undefined) requestUpdateData.passengers = updatedCarData.passengers;
+      if (updatedCarData.transmission) requestUpdateData.transmission = updatedCarData.transmission;
+      if (updatedCarData.seats !== undefined) requestUpdateData.seats = updatedCarData.seats;
+      if (updatedCarData.doors !== undefined) requestUpdateData.doors = updatedCarData.doors;
+      if (updatedCarData.modelYear !== undefined) requestUpdateData.modelYear = updatedCarData.modelYear;
+      if (updatedCarData.ratings !== undefined) requestUpdateData.ratings = updatedCarData.ratings;
+      if (updatedCarData.reviews !== undefined) requestUpdateData.reviews = updatedCarData.reviews;
+      if (updatedCarData.fuelType) requestUpdateData.fuelType = updatedCarData.fuelType;
+      if (updatedCarData.carNumber) requestUpdateData.carNumber = updatedCarData.carNumber;
+      if (updatedCarData.permited_city) requestUpdateData.permited_city = updatedCarData.permited_city;
       if (updatedCarData.from) requestUpdateData.from = updatedCarData.from;
       if (updatedCarData.to) requestUpdateData.to = updatedCarData.to;
       if (updatedCarData.image) requestUpdateData.image = updatedCarData.image;
@@ -516,10 +521,6 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
         { $set: requestUpdateData }
       );
       console.log(`Updated ${updateResult.modifiedCount} requests for carNumber: ${carNumberToMatch}`);
-
-      if (updateResult.modifiedCount === 0) {
-        console.warn("No requests were modified. Check schema alignment.");
-      }
     } else {
       console.log("No related requests found for carNumber:", carNumberToMatch);
     }
