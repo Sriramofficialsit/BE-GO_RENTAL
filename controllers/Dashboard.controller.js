@@ -1,54 +1,19 @@
 const Express = require("express");
 const Dashboard = Express.Router();
 const Car = require("../models/Car.model");
-const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 const Request = require("../models/Request.model");
 const mongoose = require("mongoose");
 const Review = require("../models/Review.model");
 const authMiddleware = require("../middleware/authmiddleware");
-
-// Configure multer to save files to disk (temporary on Render)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/images");
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
-});
-
-const upload = multer({
-  storage: storage,
-  fileFilter: (req, file, cb) => {
-    const fileTypes = /png|jpg|jpeg/;
-    const extname = fileTypes.test(
-      path.extname(file.originalname).toLowerCase()
-    );
-    const mimetype = fileTypes.test(file.mimetype);
-    if (extname && mimetype) {
-      return cb(null, true);
-    } else {
-      cb(new Error("Only PNG, JPG, and JPEG files are allowed!"));
-    }
-  },
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-});
+const { upload } = require("./User.controller"); // Import upload from User.controller.js
 
 Dashboard.get("/cars", authMiddleware, async (req, res) => {
   try {
     const cars = await Car.find({});
-    // Construct image URLs (note: files may not persist on Render)
-    const baseUrl = process.env.BASE_URL || "https://be-go-rental-hbsq.onrender.com";
-    const carsWithImageUrls = cars.map(car => {
-      const carObj = car.toObject();
-      if (carObj.image) {
-        carObj.image = `${baseUrl}/${carObj.image}`;
-      }
-      return carObj;
-    });
     res.status(200).json({
-      cars: carsWithImageUrls,
+      cars,
       success: true,
     });
   } catch (error) {
@@ -62,24 +27,10 @@ Dashboard.get("/cars", authMiddleware, async (req, res) => {
 
 Dashboard.get("/cars-renter", authMiddleware, async (req, res) => {
   const { email } = req.query;
-  if (!email) {
-    return res.status(400).json({
-      message: "Email is required",
-      success: false,
-    });
-  }
   try {
     const cars = await Car.find({ email });
-    const baseUrl = process.env.BASE_URL || "https://be-go-rental-hbsq.onrender.com";
-    const carsWithImageUrls = cars.map(car => {
-      const carObj = car.toObject();
-      if (carObj.image) {
-        carObj.image = `${baseUrl}/${carObj.image}`;
-      }
-      return carObj;
-    });
     res.status(200).json({
-      cars: carsWithImageUrls,
+      cars,
       success: true,
     });
   } catch (error) {
@@ -119,7 +70,6 @@ Dashboard.post("/car-insert", authMiddleware, upload.single("file"), async (req,
 
     const file = req.file;
 
-    // Validation: Check all required fields
     if (
       !name ||
       !priceperday ||
@@ -250,7 +200,7 @@ Dashboard.post("/car-insert", authMiddleware, upload.single("file"), async (req,
       ratings: Number(ratings),
       reviews: Number(reviews),
       fuelType,
-      image: `uploads/images/${file.filename}`, // Store file path (temporary on Render)
+      image: `Uploads/${file.filename}`, // Updated to match User.controller.js destination
       carNumber: carNumber.trim().toUpperCase(),
       from: fromDate,
       to: toDate,
@@ -263,17 +213,10 @@ Dashboard.post("/car-insert", authMiddleware, upload.single("file"), async (req,
     const insertedCar = await newCar.save();
     console.log("Car saved successfully:", insertedCar._id);
 
-    // Construct image URL for response
-    const baseUrl = process.env.BASE_URL || "https://be-go-rental-hbsq.onrender.com";
-    const carResponse = insertedCar.toObject();
-    if (carResponse.image) {
-      carResponse.image = `${baseUrl}/${carResponse.image}`;
-    }
-
     return res.status(201).json({
       message: "Car inserted successfully",
       success: true,
-      data: carResponse,
+      data: insertedCar,
     });
   } catch (error) {
     console.error("Error inserting car:", {
@@ -515,7 +458,16 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
       if (to) updatedCarData.to = toDate;
     }
     if (file) {
-      updatedCarData.image = `uploads/images/${file.filename}`; // Store new file path
+      if (car.image) {
+        try {
+          const oldImagePath = path.join(__dirname, "..", car.image);
+          await fs.promises.unlink(oldImagePath);
+          console.log("Old image deleted:", oldImagePath);
+        } catch (err) {
+          console.warn("Old image file could not be deleted:", err.message);
+        }
+      }
+      updatedCarData.image = `Uploads/${file.filename}`; // Updated to match User.controller.js destination
     }
 
     console.log("Updating car with data:", updatedCarData);
@@ -572,7 +524,6 @@ Dashboard.put("/car-update/:id", authMiddleware, upload.single("file"), async (r
       console.log("No related requests found for carNumber:", carNumberToMatch);
     }
 
-    // Construct image URL for response
     const baseUrl = process.env.BASE_URL || "https://be-go-rental-hbsq.onrender.com";
     const updatedCarResponse = updatedCar.toObject();
     if (updatedCarResponse.image) {
@@ -629,7 +580,8 @@ Dashboard.get("/cars/:id", authMiddleware, async (req, res) => {
         success: false,
       });
     }
-    const baseUrl = process.env.BASE_URL || "https://be-go-rental-hbsq.onrender.com";
+    const baseUrl =
+      process.env.BASE_URL || "https://be-go-rental-hbsq.onrender.com/";
     const carResponse = car.toObject();
     if (carResponse.image) {
       carResponse.image = `${baseUrl}/${carResponse.image}`;
@@ -689,20 +641,20 @@ Dashboard.post("/review-ratings", authMiddleware, async (req, res) => {
 Dashboard.get("/get-review-rating", async (req, res) => {
   const { carId } = req.query;
   if (!carId) {
-    return res.status(400).json({
+    return res.json({
       message: "Car Id is Missing!!",
       success: false,
     });
   }
   try {
     const response = await Review.find({ carId });
-    return res.status(200).json({
+    return res.json({
       message: "Fetched Successfully!!",
       data: response,
       success: true,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.json({
       message: error.message,
       success: false,
     });
@@ -714,7 +666,7 @@ Dashboard.post("/booking-cars-insert", authMiddleware, async (req, res) => {
     const request_data = await Request.find({ status: "approved" });
 
     if (request_data.length === 0) {
-      return res.status(404).json({
+      return res.json({
         message: "No approved requests found.",
         success: false,
       });
@@ -722,8 +674,8 @@ Dashboard.post("/booking-cars-insert", authMiddleware, async (req, res) => {
 
     const carsToInsert = [];
     for (let data of request_data) {
-      const fromDate = new Date(data.from);
-      const toDate = new Date(data.to);
+      const fromDate = parseDateString(data.from);
+      const toDate = parseDateString(data.to);
       if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
         console.warn(
           `Skipping request with invalid 'from' or 'to' dates for car number: ${data.carNumber}`
@@ -740,7 +692,7 @@ Dashboard.post("/booking-cars-insert", authMiddleware, async (req, res) => {
         passengers: data.passengers,
         seats: data.seats,
         doors: data.doors,
-        image: data.image, // File path (may become invalid on Render)
+        image: data.image,
         ratings: data.ratings || 0,
         reviews: data.reviews || 0,
         fuelType: data.fuelType,
@@ -791,7 +743,7 @@ Dashboard.post("/booking-cars-insert", authMiddleware, async (req, res) => {
     }
 
     if (carsToInsert.length === 0) {
-      return res.status(400).json({
+      return res.json({
         message: "No valid approved requests to insert.",
         success: false,
       });
@@ -799,20 +751,10 @@ Dashboard.post("/booking-cars-insert", authMiddleware, async (req, res) => {
 
     const insertedCars = await Car.insertMany(carsToInsert);
 
-    // Construct image URLs for response
-    const baseUrl = process.env.BASE_URL || "https://be-go-rental-hbsq.onrender.com";
-    const insertedCarsWithImageUrls = insertedCars.map(car => {
-      const carObj = car.toObject();
-      if (carObj.image) {
-        carObj.image = `${baseUrl}/${carObj.image}`;
-      }
-      return carObj;
-    });
-
-    return res.status(201).json({
+    return res.json({
       message: "Booking cars inserted successfully!",
       success: true,
-      data: insertedCarsWithImageUrls,
+      data: insertedCars,
     });
   } catch (error) {
     console.error("Error in booking-cars-insert:", error.message);
@@ -840,12 +782,6 @@ Dashboard.post("/booking-cars-insert", authMiddleware, async (req, res) => {
 Dashboard.delete("/car-delete/:id", authMiddleware, async (req, res) => {
   try {
     const carId = req.params.id;
-    if (!mongoose.Types.ObjectId.isValid(carId)) {
-      return res.status(400).json({
-        message: "Invalid car ID format",
-        success: false,
-      });
-    }
     const car = await Car.findById(carId);
     if (!car) {
       return res.status(404).json({
@@ -853,6 +789,12 @@ Dashboard.delete("/car-delete/:id", authMiddleware, async (req, res) => {
         success: false,
       });
     }
+    const imagePath = path.join(__dirname, "..", car.image);
+    fs.unlink(imagePath, (err) => {
+      if (err) {
+        console.warn("Image file could not be deleted:", err.message);
+      }
+    });
     await Request.deleteMany({ carNumber: car.carNumber });
     await Car.findByIdAndDelete(carId);
     return res.status(200).json({
@@ -873,12 +815,12 @@ Dashboard.get("/car-count", authMiddleware, async (req, res) => {
   const { email } = req.body;
   try {
     const count = await Car.countDocuments();
-    return res.status(200).json({
+    return res.json({
       count: count,
       success: true,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.json({
       message: error.message,
       success: false,
     });
@@ -889,7 +831,7 @@ Dashboard.get("/car-count-renter", authMiddleware, async (req, res) => {
   const { email } = req.query;
 
   if (!email) {
-    return res.status(400).json({
+    return res.json({
       message: "No email provided!",
       success: false,
     });
@@ -897,12 +839,12 @@ Dashboard.get("/car-count-renter", authMiddleware, async (req, res) => {
 
   try {
     const count = await Car.countDocuments({ email });
-    return res.status(200).json({
+    return res.json({
       count,
       success: true,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.json({
       message: error.message,
       success: false,
     });
