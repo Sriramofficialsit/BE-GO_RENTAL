@@ -63,15 +63,12 @@ Dashboard.get("/cars-renter", authMiddleware, async (req, res) => {
     });
   }
 });
-Dashboard.post("/car-insert", authMiddleware, async (req, res) => {
-  try {
-    upload.single("file")(req, res, async (err) => {
-      if (err) {
-        return res.status(400).json({
-          message: err.message || "File upload failed",
-          success: false,
-        });
-      }
+Dashboard.post(
+  "/car-insert",
+  authMiddleware,
+  upload.single("image"),
+  async (req, res) => {
+    try {
       const {
         name,
         priceperday,
@@ -91,7 +88,7 @@ Dashboard.post("/car-insert", authMiddleware, async (req, res) => {
         email,
       } = req.body;
 
-      const imageFile = req.file;
+      const imageFilePath = req.file;
 
       if (
         !name ||
@@ -112,23 +109,38 @@ Dashboard.post("/car-insert", authMiddleware, async (req, res) => {
         !email
       ) {
         return res.status(400).json({
-          message:
-            "All car fields, including 'from', 'to', 'permited_city', and 'email', are required",
+          message: "All fields are required",
           success: false,
         });
       }
 
       if (!imageFile) {
         return res.status(400).json({
-          message: "Car image is required",
+          message: "Image file is required",
+          success: false,
+        });
+      }
+
+      const allowedTypes = ["image/png", "image/jpeg", "image/jpg"];
+      if (!allowedTypes.includes(imageFile.mimetype)) {
+        return res.status(400).json({
+          message: "Image must be a PNG, JPG, or JPEG file",
+          success: false,
+        });
+      }
+
+      if (imageFile.size > 5 * 1024 * 1024) {
+        // 5MB limit
+        return res.status(400).json({
+          message: "Image size must not exceed 5MB",
           success: false,
         });
       }
 
       const carNumberRegex = /^[A-Z]{2}-\d{4}$/;
-      if (!carNumberRegex.test(carNumber.trim())) {
+      if (!carNumberRegex.test(carNumber)) {
         return res.status(400).json({
-          message: "Car number must be in the format XX-1234 (e.g., AB-1234)",
+          message: "Number must be in the format XX-1234 (e.g., AB-1234)",
           success: false,
         });
       }
@@ -141,8 +153,8 @@ Dashboard.post("/car-insert", authMiddleware, async (req, res) => {
         });
       }
 
-      const validTransmissions = ["Auto", "Manual"];
-      if (!validTransmissions.includes(transmission)) {
+      const validTransmissionTypes = ["Auto", "Manual"];
+      if (!validTransmissionTypes.includes(transmission)) {
         return res.status(400).json({
           message: "Transmission must be one of: Auto, Manual",
           success: false,
@@ -166,6 +178,7 @@ Dashboard.post("/car-insert", authMiddleware, async (req, res) => {
           success: false,
         });
       }
+
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email.trim())) {
         return res.status(400).json({
@@ -173,6 +186,7 @@ Dashboard.post("/car-insert", authMiddleware, async (req, res) => {
           success: false,
         });
       }
+
       const fromDate = new Date(from);
       const toDate = new Date(to);
       if (isNaN(fromDate.getTime())) {
@@ -187,6 +201,7 @@ Dashboard.post("/car-insert", authMiddleware, async (req, res) => {
           success: false,
         });
       }
+
       const carData = {
         name: name.trim(),
         priceperday: Number(priceperday),
@@ -199,52 +214,55 @@ Dashboard.post("/car-insert", authMiddleware, async (req, res) => {
         ratings: Number(ratings),
         reviews: Number(reviews),
         fuelType,
-        image: `uploads/images/${imageFile.filename}`,
+        image: `Uploads/images/${imageFile.filename}`,
         carNumber: carNumber.trim().toUpperCase(),
         from: fromDate,
         to: toDate,
         permited_city,
         email: email.trim(),
       };
+
       const newCar = new Car(carData);
       const insertedCar = await newCar.save();
+
       return res.status(201).json({
         message: "Car inserted successfully",
         success: true,
         data: insertedCar,
       });
-    });
-  } catch (error) {
-    console.error("Error inserting car:", error.message);
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        message: "Validation failed",
-        success: false,
-        error: Object.values(error.errors).map((err) => err.message),
+    } catch (error) {
+      console.error("Error inserting car:", {
+        message: error.message,
+        stack: error.stack,
       });
-    }
-    if (error.code === 11000) {
-      return res.status(400).json({
-        message: "Car number already exists",
-        success: false,
-      });
-    }
-    return res.status(500).json({
-      message: "Failed to insert car",
-      success: false,
-      error: error.message,
-    });
-  }
-});
-Dashboard.put("/car-update/:id", authMiddleware, async (req, res) => {
-  try {
-    upload.single("image")(req, res, async (err) => {
-      if (err) {
+
+      if (error.name === "ValidationError") {
         return res.status(400).json({
-          message: err.message || "File upload failed",
+          message: "Validation failed",
+          success: false,
+          error: Object.values(error.errors).map((err) => err.message),
+        });
+      }
+      if (error.code === 11000) {
+        return res.status(400).json({
+          message: "Car number already exists",
           success: false,
         });
       }
+      return res.status(500).json({
+        message: "Failed to insert car",
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+);
+Dashboard.put(
+  "/car-update/:id",
+  authMiddleware,
+  upload.single("image"),
+  async (req, res) => {
+    try {
       const carId = req.params.id;
       if (!mongoose.Types.ObjectId.isValid(carId)) {
         return res.status(400).json({
@@ -252,6 +270,7 @@ Dashboard.put("/car-update/:id", authMiddleware, async (req, res) => {
           success: false,
         });
       }
+
       const carObjectId = new mongoose.Types.ObjectId(carId);
       const car = await Car.findById(carObjectId);
       if (!car) {
@@ -260,6 +279,7 @@ Dashboard.put("/car-update/:id", authMiddleware, async (req, res) => {
           success: false,
         });
       }
+
       const {
         name,
         priceperday,
@@ -279,6 +299,23 @@ Dashboard.put("/car-update/:id", authMiddleware, async (req, res) => {
       } = req.body;
 
       const imageFile = req.file;
+
+      // Validate image file if provided
+      if (imageFile) {
+        const allowedTypes = ["image/png", "image/jpeg", "image/jpg"];
+        if (!allowedTypes.includes(imageFile.mimetype)) {
+          return res.status(400).json({
+            message: "Image must be a PNG, JPG, or JPEG file",
+            success: false,
+          });
+        }
+        if (imageFile.size > 5 * 1024 * 1024) {
+          return res.status(400).json({
+            message: "Image size must not exceed 5MB",
+            success: false,
+          });
+        }
+      }
 
       const updatedCarData = {};
       if (name) updatedCarData.name = name.trim();
@@ -421,103 +458,78 @@ Dashboard.put("/car-update/:id", authMiddleware, async (req, res) => {
             success: false,
           });
         }
-        if (!fromDate || !toDate) {
-          return res.status(400).json({
-            message: "Both 'from' and 'to' dates must be valid for validation",
-            success: false,
-          });
-        }
-        console.log("Existing from date:", car.from);
-        console.log("New from date (if provided):", fromDate);
-        console.log("Existing to date:", car.to);
-        console.log("New to date (if provided):", toDate);
         if (from) updatedCarData.from = fromDate;
         if (to) updatedCarData.to = toDate;
       }
       if (imageFile) {
         if (car.image) {
-          const oldImagePath = path.join(__dirname, "..", car.image);
-          fs.unlink(oldImagePath, (err) => {
-            if (err) {
-              console.warn("Old image file could not be deleted:", err.message);
-            }
-          });
+          try {
+            const oldImagePath = path.join(
+              __dirname,
+              "..",
+              "public",
+              car.image
+            );
+            await fs.unlink(oldImagePath);
+          } catch (err) {
+            console.warn("Old image file could not be deleted:", err.message);
+          }
         }
-        updatedCarData.image = `uploads/images/${imageFile.filename}`;
+        updatedCarData.image = `Uploads/images/${imageFile.filename}`;
       }
+
       const updatedCar = await Car.findByIdAndUpdate(
         carObjectId,
-        updatedCarData,
-        {
-          new: true,
-          runValidators: true,
-        }
+        { $set: updatedCarData },
+        { new: true, runValidators: true }
       );
 
       if (!updatedCar) {
-        return res.status(400).json({
+        return res.status(404).json({
           message: "Car not found",
           success: false,
         });
       }
-      try {
-        const carNumberToMatch = updatedCarData.carNumber || car.carNumber;
-        const matchingRequests = await Request.countDocuments({
-          carNumber: carNumberToMatch,
-        });
-        console.log(
-          `Found ${matchingRequests} requests for carNumber ${carNumberToMatch}`
+
+      // Update related requests
+      const carNumberToMatch = updatedCarData.carNumber || car.carNumber;
+      const matchingRequests = await Request.countDocuments({
+        carNumber: carNumberToMatch,
+      });
+
+      if (matchingRequests > 0) {
+        const requestUpdateData = {
+          car_model: updatedCar.name,
+          priceperday: updatedCar.priceperday,
+          ac: updatedCar.ac,
+          passengers: updatedCar.passengers,
+          transmission: updatedCar.transmission,
+          seats: updatedCar.seats,
+          doors: updatedCar.doors,
+          modelYear: updatedCar.modelYear,
+          ratings: updatedCar.ratings,
+          reviews: updatedCar.reviews,
+          fuelType: updatedCar.fuelType,
+          carNumber: updatedCar.carNumber,
+          permited_city: updatedCar.permited_city,
+        };
+        if (updatedCarData.from) requestUpdateData.from = updatedCarData.from;
+        if (updatedCarData.to) requestUpdateData.to = updatedCarData.to;
+        if (updatedCarData.image)
+          requestUpdateData.image = updatedCarData.image;
+
+        const updateResult = await Request.updateMany(
+          { carNumber: carNumberToMatch },
+          { $set: requestUpdateData }
         );
 
-        if (matchingRequests === 0) {
-          console.log("No requests found to update for this carNumber.");
-        } else {
-          const requestUpdateData = {
-            car_model: updatedCar.name,
-            priceperday: updatedCar.priceperday,
-            ac: updatedCar.ac,
-            passengers: updatedCar.passengers,
-            transmission: updatedCar.transmission,
-            seats: updatedCar.seats,
-            doors: updatedCar.doors,
-            modelYear: updatedCar.modelYear,
-            ratings: updatedCar.ratings,
-            reviews: updatedCar.reviews,
-            fuelType: updatedCar.fuelType,
-            carNumber: updatedCar.carNumber,
-            permited_city: updatedCar.permited_city,
-          };
-          if (updatedCarData.from)
-            requestUpdateData.from = updatedCarData.from.toISOString();
-          if (updatedCarData.to)
-            requestUpdateData.to = updatedCarData.to.toISOString();
-          if (updatedCarData.image) {
-            requestUpdateData.image = updatedCarData.image;
-          }
-
-          const updateResult = await Request.updateMany(
-            { carNumber: carNumberToMatch },
-            { $set: requestUpdateData }
-          );
-
-          console.log(
-            `Updated ${updateResult.modifiedCount} requests for carNumber ${carNumberToMatch}`
-          );
-          if (updateResult.modifiedCount === 0 && matchingRequests > 0) {
-            console.warn(
-              "Requests found but none were modified. Check schema alignment."
-            );
-          }
+        if (updateResult.modifiedCount === 0) {
+          console.warn("No requests were modified. Check schema alignment.");
         }
-      } catch (requestError) {
-        console.error("Error updating requests:", requestError.message);
-        return res.status(500).json({
-          message: "Car updated, but failed to update related requests",
-          success: false,
-          error: requestError.message,
-        });
       }
-      const baseUrl = process.env.BASE_URL || "http://localhost:3000/";
+
+      const baseUrl =
+        process.env.BASE_URL || "https://be-go-rental-hbsq.onrender.com";
       const updatedCarResponse = updatedCar.toObject();
       if (updatedCarResponse.image) {
         updatedCarResponse.image = `${baseUrl}/${updatedCarResponse.image}`;
@@ -528,29 +540,32 @@ Dashboard.put("/car-update/:id", authMiddleware, async (req, res) => {
         success: true,
         data: updatedCarResponse,
       });
-    });
-  } catch (error) {
-    console.error("Error updating car:", error.message);
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        message: "Validation failed",
+    } catch (error) {
+      console.error("Error updating car:", {
+        message: error.message,
+        stack: error.stack,
+      });
+      if (error.name === "ValidationError") {
+        return res.status(400).json({
+          message: "Validation failed",
+          success: false,
+          error: Object.values(error.errors).map((err) => err.message),
+        });
+      }
+      if (error.code === 11000) {
+        return res.status(400).json({
+          message: "Car number already exists",
+          success: false,
+        });
+      }
+      return res.status(500).json({
+        message: "Failed to update car",
         success: false,
-        error: Object.values(error.errors).map((err) => err.message),
+        error: error.message,
       });
     }
-    if (error.code === 11000) {
-      return res.status(400).json({
-        message: "Car number already exists",
-        success: false,
-      });
-    }
-    return res.status(500).json({
-      message: "Failed to update car",
-      success: false,
-      error: error.message,
-    });
   }
-});
+);
 Dashboard.get("/cars/:id", authMiddleware, async (req, res) => {
   try {
     const carId = req.params.id;
