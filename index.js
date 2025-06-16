@@ -17,7 +17,7 @@ const corsOptions = {
   origin: [
     "https://go-rental-user.netlify.app",
     "https://go-rental-renter.netlify.app",
-    "https://go-rental-admin.netlify.app",
+    "https://go-rental-admin-off.netlify.app",
   ],
   credentials: true,
 };
