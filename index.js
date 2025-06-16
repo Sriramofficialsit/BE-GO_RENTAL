@@ -24,7 +24,7 @@ const corsOptions = {
 
 
 go_rental.options("*", cors(corsOptions));
-go_rental.use("*",cors());
+
 go_rental.use(Express.json());
 go_rental.use("/auth", Auth);
 go_rental.use("/dashboard", Dashboard);
