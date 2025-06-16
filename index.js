@@ -72,6 +72,6 @@ go_rental.get("/api/payments", authMiddleware, async (req, res) => {
       .json({ error: "Failed to fetch payments" });
   }
 });
-go_rental.listen(PORT, HOSTNAME, () => {
-  console.log(`Server Started At http://${HOSTNAME}:${PORT}`);
+go_rental.listen(PORT, () => {
+  console.log(`Server Started At port ${PORT}`);
 });
