@@ -3,6 +3,7 @@ const Approvals = express.Router();
 const Request = require("../models/Request.model");
 const Car = require("../models/Car.model");
 const path = require("path");
+const mongoose = require("mongoose");
 const fs = require("fs");
 const authMiddleware = require("../middleware/authmiddleware");
 const { upload } = require("./User.controller"); // Import upload from User.controller.js
