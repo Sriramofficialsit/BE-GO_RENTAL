@@ -360,6 +360,8 @@ const parseDateString = (dateString) => {
 Approvals.put("/approve/:id", authMiddleware, async (req, res) => {
   try {
     const requestId = req.params.id;
+
+    // Validate ObjectId
     if (!mongoose.Types.ObjectId.isValid(requestId)) {
       console.log("Invalid request ID:", requestId);
       return res.status(400).json({
@@ -368,11 +370,13 @@ Approvals.put("/approve/:id", authMiddleware, async (req, res) => {
       });
     }
 
+    // Approve request status
     const request = await Request.findByIdAndUpdate(
       requestId,
       { status: "approved" },
       { new: true }
     );
+
     if (!request) {
       console.log("Request not found:", requestId);
       return res.status(404).json({
@@ -381,6 +385,7 @@ Approvals.put("/approve/:id", authMiddleware, async (req, res) => {
       });
     }
 
+    // Check for duplicate car number
     const existingCar = await Car.findOne({ carNumber: request.carNumber });
     if (existingCar) {
       console.log("Car number already exists:", request.carNumber);
@@ -390,8 +395,10 @@ Approvals.put("/approve/:id", authMiddleware, async (req, res) => {
       });
     }
 
-    const fromDate = parseDateString(request.from);
-    const toDate = parseDateString(request.to);
+    // Convert dates safely
+    const fromDate = new Date(request.from);
+    const toDate = new Date(request.to);
+
     if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
       console.log("Invalid dates in request:", { from: request.from, to: request.to });
       return res.status(400).json({
@@ -400,6 +407,15 @@ Approvals.put("/approve/:id", authMiddleware, async (req, res) => {
       });
     }
 
+    // Optional: validate date logic
+    if (fromDate > toDate) {
+      return res.status(400).json({
+        message: "'From' date must be earlier than or equal to 'to' date",
+        success: false,
+      });
+    }
+
+    // Create new Car entry
     const newCar = new Car({
       name: request.car_model,
       email: request.email,
@@ -434,6 +450,7 @@ Approvals.put("/approve/:id", authMiddleware, async (req, res) => {
       stack: error.stack,
       code: error.code,
     });
+
     if (error.name === "ValidationError") {
       return res.status(400).json({
         message: "Validation failed",
@@ -441,12 +458,14 @@ Approvals.put("/approve/:id", authMiddleware, async (req, res) => {
         error: Object.values(error.errors).map((err) => err.message),
       });
     }
+
     if (error.code === 11000) {
       return res.status(400).json({
         message: "Car number already exists",
         success: false,
       });
     }
+
     return res.status(500).json({
       message: "Failed to approve request",
       success: false,
