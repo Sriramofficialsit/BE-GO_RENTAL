@@ -1,3 +1,4 @@
+
 const Express = require("express");
 const Dashboard = Express.Router();
 const Car = require("../models/Car.model");
@@ -8,7 +9,10 @@ const Request = require("../models/Request.model");
 const mongoose = require("mongoose");
 const Review = require("../models/Review.model");
 const authMiddleware = require("../middleware/authmiddleware");
-
+const uploadDir = "uploads";
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "uploads/images");
