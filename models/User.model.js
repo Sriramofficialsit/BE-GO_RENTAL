@@ -12,15 +12,33 @@ const UserSchema = mongoose.Schema(
       required: true,
       unique: true,
       lowercase: true,
-      validate: {
-        validator: validator.isEmail,
-        message: "Invalid email format",
-      },
+      validate: [
+        {
+          validator: validator.isEmail,
+          message: "Invalid email format",
+        },
+        {
+          validator: function (v) {
+            return /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(v);
+          },
+          message: "Email does not match required pattern",
+        },
+      ],
     },
+
     password: {
       type: String,
       required: true,
+      validate: {
+        validator: function (v) {
+          // Allows any characters but requires at least 1 letter and 1 digit, and min 8 chars
+          return /^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(v);
+        },
+        message:
+          "Password must be at least 8 characters long and contain at least one letter and one number",
+      },
     },
+
     mobileno: {
       type: Number,
       required: true,
