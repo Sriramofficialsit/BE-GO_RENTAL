@@ -84,6 +84,148 @@ Auth.post("/register", async (req, res) => {
   }
 });
 
+const otpStore = new Map();
+
+const generateOTP = () =>
+  Math.floor(100000 + Math.random() * 900000).toString();
+const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+const mobileRegex = /^[0-9]{10}$/;
+// Combined route
+Auth.post("/register-with-otp", async (req, res) => {
+  const { step } = req.body;
+
+  if (step === "send-otp") {
+    const { name, email, password, mobileno } = req.body;
+
+    if (!name || !email || !password || !mobileno) {
+      return res
+        .status(400)
+        .json({ message: "All fields are required", success: false });
+    }
+
+    if (!emailRegex.test(email)) {
+      return res
+        .status(400)
+        .json({ message: "Invalid email format", success: false });
+    }
+
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({
+        message:
+          "Password must be at least 8 characters long and contain at least one letter and one number",
+        success: false,
+      });
+      if (!mobileRegex.test(mobileno)) {
+        return res.status(400).json({
+          message: "Mobile number must be 10 digits",
+          success: false,
+        });
+      }
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res
+        .status(400)
+        .json({ message: "User already exists", success: false });
+    }
+
+    const otp = generateOTP();
+    const otpExpiry = Date.now() + 10 * 60 * 1000;
+
+    otpStore.set(email, {
+      otp,
+      name,
+      email,
+      password,
+      mobileno,
+      expiresAt: otpExpiry,
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Your OTP for Go Rental Registration",
+      text: `Your OTP for registration is ${otp}. It is valid for 10 minutes.`,
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+      return res
+        .status(200)
+        .json({ message: "OTP sent to your email", success: true });
+    } catch (error) {
+      return res.status(500).json({
+        message: "Failed to send OTP",
+        success: false,
+        error: error.message,
+      });
+    }
+  } else if (step === "verify-otp") {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res
+        .status(400)
+        .json({ message: "Email and OTP are required", success: false });
+    }
+
+    const storedData = otpStore.get(email);
+    if (!storedData) {
+      return res
+        .status(400)
+        .json({ message: "OTP not found or expired", success: false });
+    }
+
+    const { otp: storedOtp, expiresAt, name, password, mobileno } = storedData;
+
+    if (Date.now() > expiresAt) {
+      otpStore.delete(email);
+      return res
+        .status(400)
+        .json({ message: "OTP has expired", success: false });
+    }
+
+    if (otp !== storedOtp) {
+      return res.status(400).json({ message: "Invalid OTP", success: false });
+    }
+
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const newUser = new User({
+        name,
+        email,
+        password: hashedPassword,
+        mobileno,
+      });
+      await newUser.save();
+      otpStore.delete(email);
+      return res
+        .status(201)
+        .json({ message: "User Registration Successful", success: true });
+    } catch (error) {
+      return res.status(500).json({
+        message: "Internal Server Error",
+        success: false,
+        error: error.message,
+      });
+    }
+  } else {
+    return res.status(400).json({ message: "Invalid step", success: false });
+  }
+});
+
+// Periodic cleanup
+setInterval(() => {
+  const now = Date.now();
+  for (const [email, data] of otpStore.entries()) {
+    if (now > data.expiresAt) {
+      otpStore.delete(email);
+    }
+  }
+}, 60 * 1000);
+
 Auth.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
